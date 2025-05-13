@@ -186,24 +186,21 @@ def main():
         data = st.date_input("Data")
         descricao = st.text_input("Descrição")
         imposto = st.selectbox("Imposto", ['C', 'N', 'T', 'S'])
-        vinculo_credito = st.text_input("Vínculo do Crédito")
-        base_credito = st.text_input("Base de Crédito")
+        
+        # Toggle para campos de crédito
+        mostrar_campos_credito = st.toggle("Mostrar campos de crédito", value=False)
+        
+        if mostrar_campos_credito:
+            vinculo_credito = st.text_input("Vínculo do Crédito")
+            base_credito = st.text_input("Base de Crédito")
+        else:
+            vinculo_credito = ""
+            base_credito = ""
     
     # Área principal
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Arquivos de Entrada")
-        planilha_modelo = st.file_uploader("Planilha Modelo", type=['xlsx'])
-        planilha_ncm = st.file_uploader("Planilha com NCMs", type=['xlsx'])
-    
-    with col2:
-        st.subheader("Pasta de Saída")
-        pasta_saida = st.text_input("Caminho da pasta de saída")
-        if not pasta_saida:
-            pasta_saida = os.path.join(tempfile.gettempdir(), "ncm_output")
-            os.makedirs(pasta_saida, exist_ok=True)
-            st.info(f"Usando pasta temporária: {pasta_saida}")
+    st.subheader("Arquivos de Entrada")
+    planilha_modelo = st.file_uploader("Planilha Modelo", type=['xlsx'])
+    planilha_ncm = st.file_uploader("Planilha com NCMs", type=['xlsx'])
     
     st.markdown("---")
     
@@ -213,32 +210,21 @@ def main():
             st.error("Selecione a planilha modelo e a planilha com NCMs")
             return
         
-        # Salva os arquivos temporariamente
-        temp_dir = tempfile.mkdtemp()
-        temp_modelo = os.path.join(temp_dir, "modelo.xlsx")
-        temp_ncm = os.path.join(temp_dir, "ncm.xlsx")
-        
-        with open(temp_modelo, "wb") as f:
-            f.write(planilha_modelo.getvalue())
-        with open(temp_ncm, "wb") as f:
-            f.write(planilha_ncm.getvalue())
+        # Cria pasta temporária para saída
+        pasta_saida = os.path.join(tempfile.gettempdir(), "ncm_output")
+        os.makedirs(pasta_saida, exist_ok=True)
         
         # Processa os arquivos
         caminho_final = processar_planilha(
-            temp_ncm,
+            planilha_ncm,
             pasta_saida,
             data.strftime("%d/%m/%Y"),
             descricao,
             imposto,
             vinculo_credito,
             base_credito,
-            temp_modelo
+            planilha_modelo
         )
-        
-        # Limpa arquivos temporários
-        os.remove(temp_modelo)
-        os.remove(temp_ncm)
-        os.rmdir(temp_dir)
         
         if caminho_final:
             st.success(f"Arquivo final salvo em: {caminho_final}")
