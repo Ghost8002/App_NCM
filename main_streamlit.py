@@ -3,9 +3,29 @@ import pandas as pd
 import os
 import openpyxl
 import tempfile
+import requests
 from pathlib import Path
 
-def processar_planilha(planilha_ncm, pasta_saida, data, descricao, imposto, vinculo_credito, base_credito, planilha_modelo):
+def baixar_planilha_modelo(url, pasta_destino):
+    """
+    Baixa a planilha modelo do GitHub e salva na pasta de destino.
+    Retorna o caminho completo do arquivo baixado.
+    """
+    try:
+        st.info("Baixando planilha modelo do GitHub...")
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        
+        caminho_arquivo = os.path.join(pasta_destino, "planilha_modelo.xlsx")
+        with open(caminho_arquivo, 'wb') as f:
+            f.write(response.content)
+        
+        return caminho_arquivo
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erro ao baixar planilha modelo: {str(e)}")
+        return None
+
+def processar_planilha(planilha_ncm, pasta_saida, data, descricao, imposto, vinculo_credito, base_credito, caminho_planilha_modelo):
     try:
         # 1. Processar planilha NCM
         st.info("Processando planilha NCM...")
@@ -90,7 +110,7 @@ def processar_planilha(planilha_ncm, pasta_saida, data, descricao, imposto, vinc
                     ncms.append(linha)
             
             # Cria planilha individual
-            wb = openpyxl.load_workbook(planilha_modelo)
+            wb = openpyxl.load_workbook(caminho_planilha_modelo)
             ws = wb.active
             
             # Preenche campos
@@ -120,14 +140,14 @@ def processar_planilha(planilha_ncm, pasta_saida, data, descricao, imposto, vinc
         st.info("Mesclando planilhas...")
         
         # 3. Mesclar planilhas
-        wb_final = openpyxl.load_workbook(planilha_modelo)
+        wb_final = openpyxl.load_workbook(caminho_planilha_modelo)
         ws_final = wb_final.active
         
         # Define onde começar a inserir os dados
         current_row = 3
         
         # Para cada planilha individual
-        arquivos_excel = [f for f in os.listdir(pasta_saida) if f.endswith('.xlsx') and f != "planilha_final.xlsx"]
+        arquivos_excel = [f for f in os.listdir(pasta_saida) if f.endswith('.xlsx') and f != "planilha_final.xlsx" and f != "planilha_modelo.xlsx" and f != "planilha_ncm_temp.xlsx"]
         total_excel = len(arquivos_excel)
         
         for idx, arquivo in enumerate(arquivos_excel, 1):
@@ -200,31 +220,49 @@ def main():
     
     # Área principal
     st.subheader("Arquivos de Entrada")
-    planilha_modelo = st.file_uploader("Planilha Modelo", type=['xlsx'])
+    
+    # URL da planilha modelo no GitHub (raw URL)
+    url_planilha_modelo = "https://raw.githubusercontent.com/Ghost8002/App_NCM/main/Planilha.xlsx"
+    
+    # Informa que a planilha modelo será baixada automaticamente
+    st.info("ℹ️ A planilha modelo será baixada automaticamente do GitHub.")
+    
     planilha_ncm = st.file_uploader("Planilha com NCMs", type=['xlsx'])
     
     st.markdown("---")
     
     # Botão processar
     if st.button("Processar", type="primary"):
-        if not planilha_modelo or not planilha_ncm:
-            st.error("Selecione a planilha modelo e a planilha com NCMs")
+        if not planilha_ncm:
+            st.error("Selecione a planilha com NCMs")
             return
         
         # Cria pasta temporária para saída
         pasta_saida = os.path.join(tempfile.gettempdir(), "ncm_output")
         os.makedirs(pasta_saida, exist_ok=True)
         
+        # Baixa a planilha modelo automaticamente
+        caminho_planilha_modelo = baixar_planilha_modelo(url_planilha_modelo, pasta_saida)
+        
+        if not caminho_planilha_modelo:
+            st.error("Não foi possível baixar a planilha modelo. Verifique sua conexão com a internet.")
+            return
+        
+        # Salva a planilha NCM temporariamente para processamento
+        caminho_planilha_ncm = os.path.join(pasta_saida, "planilha_ncm_temp.xlsx")
+        with open(caminho_planilha_ncm, 'wb') as f:
+            f.write(planilha_ncm.getbuffer())
+        
         # Processa os arquivos
         caminho_final = processar_planilha(
-            planilha_ncm,
+            caminho_planilha_ncm,
             pasta_saida,
             data.strftime("%d/%m/%Y"),
             descricao,
             imposto,
             vinculo_credito,
             base_credito,
-            planilha_modelo
+            caminho_planilha_modelo
         )
         
         if caminho_final:
